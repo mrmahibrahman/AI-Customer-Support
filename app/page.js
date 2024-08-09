@@ -19,16 +19,30 @@ export default function Home() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUser(user);
+        const docRef = doc(firestore, "chats", user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setMessages(docSnap.data().messages);
+        } else {
+          console.log("No chat history found");
+        }
       } else {
         setUser(null);
+        setMessages([
+          {
+            role: 'assistant',
+            content: "Hi, I'm the support agent, how can I assist you?",
+          }
+        ]);
       }
     });
-
+  
     return () => unsubscribe();
   }, []);
+  
 
   // authentication
   const handleGoogle = async () => {
@@ -51,53 +65,63 @@ export default function Home() {
   const sendMessage = async () => {
     if (!message.trim() || isLoading) return;
     setIsLoading(true);
-
-    setMessage('');
-    setMessages((messages) => [
+  
+    const newMessages = [
       ...messages,
       { role: 'user', content: message },
       { role: 'assistant', content: '' },
-    ]);
-
+    ];
+  
+    setMessage('');
+    setMessages(newMessages);
+  
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify([...messages, { role: 'user', content: message }]),
+        body: JSON.stringify(newMessages),
       });
-
+  
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
-
+  
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-
+      let finalMessages = [...newMessages];
+  
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const text = decoder.decode(value, { stream: true });
-        setMessages((messages) => {
-          let lastMessage = messages[messages.length - 1];
-          let otherMessages = messages.slice(0, messages.length - 1);
-          return [
-            ...otherMessages,
-            { ...lastMessage, content: lastMessage.content + text },
-          ];
+        finalMessages = finalMessages.map((msg, index) => {
+          if (index === finalMessages.length - 1) {
+            return { ...msg, content: msg.content + text };
+          }
+          return msg;
         });
+  
+        setMessages(finalMessages);
       }
+  
+      if (user) {
+        const docRef = doc(firestore, "chats", user.uid);
+        await setDoc(docRef, { messages: finalMessages });
+      }
+  
     } catch (error) {
       console.error('Error:', error);
-      setMessages((messages) => [
-        ...messages,
+      setMessages([
+        ...newMessages,
         { role: 'assistant', content: "I'm sorry, but I encountered an error. Please try again later." },
       ]);
     }
-
+  
     setIsLoading(false);
   };
+  
 
   const handleKeyPress = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
