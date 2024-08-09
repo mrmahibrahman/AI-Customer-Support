@@ -1,5 +1,6 @@
-'use client'
-import { Box, Button, Stack, TextField, Typography } from "@mui/material";
+'use client';
+import { Box, Button, Stack, TextField, Typography, useMediaQuery } from "@mui/material";
+import { useTheme } from '@mui/material/styles';
 import { useState, useEffect } from "react";
 import { firestore } from '@/firebase';
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
@@ -7,10 +8,13 @@ import { collection, deleteDoc, doc, getDocs, query, getDoc, setDoc } from 'fire
 import { auth } from '../firebase';
 
 export default function Home() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hi, I'm the support agent, how can I assist you?",
+      content: "Hi, I'm the support agent, how can I assist you? (If you want to save your messages, please sign in)",
     }
   ]);
 
@@ -34,7 +38,7 @@ export default function Home() {
         setMessages([
           {
             role: 'assistant',
-            content: "Hi, I'm the support agent, how can I assist you?",
+            content: "Hi, I'm the support agent, how can I assist you? (If you want to save your messages, please sign in)",
           }
         ]);
       }
@@ -42,9 +46,7 @@ export default function Home() {
   
     return () => unsubscribe();
   }, []);
-  
 
-  // authentication
   const handleGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
@@ -121,7 +123,6 @@ export default function Home() {
   
     setIsLoading(false);
   };
-  
 
   const handleKeyPress = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -131,23 +132,41 @@ export default function Home() {
   };
 
   return (
-<Box
+    <Box
       width="100vw"
       height="100vh"
       display="flex"
-      flexDirection="column"
+      flexDirection={isMobile ? "column" : "row"}
       justifyContent="center"
       alignItems="center"
       bgcolor="#222222"
+      position="relative"
     >
+      {/* Left Side - Customer Support Label */}
+      <Box
+        position="fixed"
+        top={16}
+        left={16}
+        display={isMobile ? "none" : "flex"}
+        flexDirection="column"
+        alignItems="center"
+        color="white"
+        zIndex={2} // Added zIndex to keep it on top
+      >
+        <Typography variant="h4" color="primary.main">
+          Customer Support
+        </Typography>
+      </Box>
+
       {/* Sign In Button and User Info */}
       <Box
-        position="absolute"
+        position="fixed"
         top={16}
         right={16}
         display="flex"
         alignItems="center"
         gap={2}
+        zIndex={2} // Added zIndex to keep it on top
       >
         {user && (
           <Typography color="white">
@@ -167,12 +186,15 @@ export default function Home() {
 
       <Stack
         direction="column"
-        width="500px"
-        height="700px"
+        width={isMobile ? "90vw" : "500px"}
+        height={isMobile ? "70vh" : "700px"}
+        maxWidth={isMobile ? "100vw" : "90vw"} // Added max width for desktop screens
+        maxHeight={isMobile ? "85vh" : "85vh"} // Added max height for desktop screens
         border="1px solid silver"
         p={2}
         spacing={3}
         bgcolor="black"
+        zIndex={1} // Ensure chat box is below the fixed elements
       >
         <Stack
           direction="column"
@@ -198,6 +220,14 @@ export default function Home() {
                 color="white"
                 borderRadius={16}
                 p={3}
+                maxWidth="90%"
+                alignSelf={message.role === 'assistant' ? 'flex-start' : 'flex-end'}
+                sx={{
+                  lineHeight: '1.6',
+                  wordBreak: 'break-word',
+                  whiteSpace: 'pre-line',
+                  padding: message.role === 'assistant' ? '24px 24px' : '16px 16px',
+                }}
               >
                 {message.content}
               </Box>
