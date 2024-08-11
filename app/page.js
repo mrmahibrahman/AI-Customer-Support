@@ -4,7 +4,7 @@ import { useTheme } from '@mui/material/styles';
 import { useState, useEffect } from "react";
 import { firestore } from '@/firebase';
 import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, deleteDoc, doc, getDocs, query, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth } from '../firebase';
 
 export default function Home() {
@@ -23,15 +23,21 @@ export default function Home() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const handleAuthStateChange = async (user) => {
+      console.log('User state changed:', user);
       if (user) {
         setUser(user);
         const docRef = doc(firestore, "chats", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setMessages(docSnap.data().messages);
-        } else {
-          console.log("No chat history found");
+        try {
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            console.log('Chat history found:', docSnap.data().messages);
+            setMessages(docSnap.data().messages);
+          } else {
+            console.log("No chat history found");
+          }
+        } catch (error) {
+          console.error('Error fetching chat history:', error);
         }
       } else {
         setUser(null);
@@ -42,8 +48,11 @@ export default function Home() {
           }
         ]);
       }
-    });
-  
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, handleAuthStateChange);
+
+    // Clean up subscription on unmount
     return () => unsubscribe();
   }, []);
 
@@ -92,21 +101,28 @@ export default function Home() {
   
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      
       let finalMessages = [...newMessages];
+      let assistantMessageIndex = finalMessages.length - 1;
   
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+  
         const text = decoder.decode(value, { stream: true });
         finalMessages = finalMessages.map((msg, index) => {
-          if (index === finalMessages.length - 1) {
+          if (index === assistantMessageIndex) {
             return { ...msg, content: msg.content + text };
           }
           return msg;
         });
   
+        // Update the state incrementally
         setMessages(finalMessages);
       }
+  
+      // Final update to ensure last chunk of data is included
+      setMessages(finalMessages);
   
       if (user) {
         const docRef = doc(firestore, "chats", user.uid);
@@ -123,7 +139,7 @@ export default function Home() {
   
     setIsLoading(false);
   };
-
+  
   const handleKeyPress = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
